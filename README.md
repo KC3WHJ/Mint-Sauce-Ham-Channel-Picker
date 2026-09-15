@@ -1,14 +1,23 @@
 # Mint Sauce Ham Channel Picker
 
-Turns a RAINWorks-style "Standalone Analog Programming Guide" PDF (or any
-similarly-tabulated repeater/frequency guide) into memory channels on an
-Icom radio, and gives you a desktop app to browse/jump to them by name or
-group. Radio-neutral: everything here reads whichever radio is described in
-`~/radio_profiles/active-radio.conf` (see "Radio profile format" below), so
-switching radios is just switching which profile that file points at.
-Currently used with the IC-705 (grouped/multi-band memory) and IC-7300
-(flat/single-band memory) — see "Adding a radio" below for what a new one
-needs.
+**Icom radios only.** Turns a RAINWorks-style "Standalone Analog
+Programming Guide" PDF (or any similarly-tabulated repeater/frequency
+guide) into memory channels, and gives you a desktop app to browse/jump
+to them by name or group — but the whole mechanism (memory group/channel
+selection, frequency/mode encoding, everything in `program_channels.py`)
+is built entirely on Icom's **CI-V** protocol. It does not work with
+Yaesu, Kenwood, Xiegu, or any other non-Icom radio — those speak
+entirely different CAT protocols with no CI-V equivalent implemented
+here. Trying it against one fails with a clear "No channel map"
+error rather than attempting anything and getting it wrong.
+
+Within that Icom-only scope, it reads whichever radio is described in
+`~/radio_profiles/active-radio.conf` (see "Radio profile format" below),
+so switching radios is just switching which profile that file points at.
+Currently wired up for the IC-705 (grouped/multi-band memory) and IC-7300
+(flat/single-band memory) — see "Adding a radio" below for what a new
+*Icom* radio needs; a non-Icom radio would mean building a second
+protocol backend from scratch, not just a new config entry.
 
 Standalone extraction of the `channel-tools/` component from
 [mint-sauce-for-ham](https://github.com/KC3WHJ/mint-sauce-for-ham), a
