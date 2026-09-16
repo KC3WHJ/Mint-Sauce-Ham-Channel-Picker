@@ -2,8 +2,11 @@
 
 Turns a RAINWorks-style "Standalone Analog Programming Guide" PDF (or any
 similarly-tabulated repeater/frequency guide) into memory channels, and
-gives you a desktop app to browse/jump to them by name or group. **Two
-protocol backends, three radios — not every radio out there.**
+gives you a desktop app to browse/jump to them by name or group. Get your
+own area's guide directly from RAINWorks LLC at
+<https://www.rainworksusa.com/standalone-programming-pdf> (see "Getting
+a PDF to work from" below for details). **Two protocol backends, three
+radios — not every radio out there.**
 `program_channels.py` speaks either Icom's binary **CI-V** protocol
 (`Radio` class) or Yaesu's plain-ASCII **CAT** protocol
 (`YaesuFT891Radio` class), chosen per-radio via `PROTOCOL` in
