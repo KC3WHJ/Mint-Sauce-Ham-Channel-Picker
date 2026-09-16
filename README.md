@@ -108,6 +108,9 @@ If you're coming from mint-sauce-for-ham, this is the exact same file its
   over CI-V or Yaesu CAT per its profile's `PROTOCOL` (USB — close
   rigctld/flrig/WSJT-X/etc. first so the serial port is free).
 - `channel-picker.py` — the desktop app.
+- `android/` — optional read-only Android companion app (no rig control)
+  for browsing the same channels offline. See "Optional: offline Android
+  channel viewer" below.
 
 ## Grouped vs. flat memory — why there are per-radio maps at all
 
@@ -260,6 +263,61 @@ writing raw bytes to the same physical UART at once). It does *not* restart
 whatever it stopped afterward (it has no way to know if you want your other
 software's radio control back) — the status bar tells you what it stopped;
 restart it yourself.
+
+## Optional: offline Android channel viewer
+
+`android/` is a second, separate way to browse these same channels — a
+small read-only Android app (Kotlin + Jetpack Compose) for when you don't
+have a machine with rig control handy, or the radio doesn't have CAT/CI-V
+support at all. **It's an additional option alongside the Python Channel
+Picker above, not a replacement for it** — it never talks to a radio at
+all (no CAT, no CI-V, no serial port, no permissions beyond reading its
+own bundled data), it just displays channel number/name/frequency/mode
+for IC-705, IC-7300, and FT-891, searchable and grouped by section, from
+the exact same `channels_*.json` files this repo already tracks.
+
+Building it needs an Android SDK + JDK 17 + Gradle set up once (see
+Android's own command-line tools docs if starting from scratch); after
+that:
+
+```bash
+cd android
+./gradlew assembleDebug
+# APK lands at app/build/outputs/apk/debug/app-debug.apk
+```
+
+Get the APK onto a phone however's convenient — a local web server on the
+same Wi-Fi (`python3 -m http.server` in the folder holding the APK, then
+open `http://<laptop-ip>:<port>/app-debug.apk` in the phone's browser) is
+usually simpler than USB/`adb install`, especially if the phone's USB
+cable turns out to be charge-only (a real, easy-to-hit failure mode - if
+`adb devices` shows nothing and the phone doesn't even offer a File
+Transfer/USB tethering option when plugged in, that's the cable, not a
+settings problem).
+
+**Each radio numbers channels differently on its own display, and this
+app matches that rather than showing the raw JSON `channel_number`
+field** (which is just this project's own internal indexing and doesn't
+correspond to anything the radio shows):
+
+- **IC-7300 / FT-891** — flat memory, so `channel_number - 150` (CH151
+  in the JSON is memory 1 on the radio, CH233 is memory 83 - confirmed
+  against `channel_maps/ic7300.json`'s own notes; FT-891 shares this
+  exact numbering since it has the identical flat 001-099 memory
+  architecture and the identical CH151-233 range in its own
+  `channels_ft891.json`).
+- **IC-705** — true multi-group CI-V memory, not flat: this public
+  channel set spans five CI-V groups (confirmed live: groups 12-16, slot
+  resetting within each group), so the app shows Icom's own
+  "Group-Slot" style number (e.g. `12-01`) using the JSON's `group`/
+  `slot` fields directly, rather than a flat offset that wouldn't match
+  anything the radio actually displays.
+
+If a future radio's on-screen numbering doesn't fit either pattern
+(`Numbering.Offset` or `Numbering.GroupSlot` in `ChannelData.kt`), add a
+new `Numbering` case rather than guessing which existing one is close
+enough - confirm the real mapping against the radio first, the same way
+the two above were confirmed live rather than assumed.
 
 ## Adding a radio
 

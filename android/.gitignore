@@ -1,0 +1,11 @@
+# Channel data assets ARE tracked here (app/src/main/assets/channels_*.json) -
+# this repo's own policy is public/non-proprietary data only, same as the
+# channels_*.json files already tracked at the repo root.
+
+# Standard Android/Gradle build artifacts
+.gradle/
+build/
+app/build/
+local.properties
+*.iml
+.idea/
