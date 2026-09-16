@@ -1,23 +1,26 @@
 # Mint Sauce Ham Channel Picker
 
-**Icom radios only.** Turns a RAINWorks-style "Standalone Analog
-Programming Guide" PDF (or any similarly-tabulated repeater/frequency
-guide) into memory channels, and gives you a desktop app to browse/jump
-to them by name or group — but the whole mechanism (memory group/channel
-selection, frequency/mode encoding, everything in `program_channels.py`)
-is built entirely on Icom's **CI-V** protocol. It does not work with
-Yaesu, Kenwood, Xiegu, or any other non-Icom radio — those speak
-entirely different CAT protocols with no CI-V equivalent implemented
-here. Trying it against one fails with a clear "No channel map"
-error rather than attempting anything and getting it wrong.
+Turns a RAINWorks-style "Standalone Analog Programming Guide" PDF (or any
+similarly-tabulated repeater/frequency guide) into memory channels, and
+gives you a desktop app to browse/jump to them by name or group. **Two
+protocol backends, three radios — not every radio out there.**
+`program_channels.py` speaks either Icom's binary **CI-V** protocol
+(`Radio` class) or Yaesu's plain-ASCII **CAT** protocol
+(`YaesuFT891Radio` class), chosen per-radio via `PROTOCOL` in
+`~/radio_profiles/active-radio.conf` (`"civ"` or `"yaesu_cat"`). It does
+not work with Kenwood, Xiegu, or any other radio speaking neither of
+those two protocol families — trying it against one fails with a clear
+"No channel map" error rather than attempting anything and getting it
+wrong.
 
-Within that Icom-only scope, it reads whichever radio is described in
+Within that scope, it reads whichever radio is described in
 `~/radio_profiles/active-radio.conf` (see "Radio profile format" below),
 so switching radios is just switching which profile that file points at.
-Currently wired up for the IC-705 (grouped/multi-band memory) and IC-7300
-(flat/single-band memory) — see "Adding a radio" below for what a new
-*Icom* radio needs; a non-Icom radio would mean building a second
-protocol backend from scratch, not just a new config entry.
+Currently wired up for the IC-705 (CI-V, grouped/multi-band memory), the
+IC-7300 (CI-V, flat/single-band memory), and the FT-891 (Yaesu CAT,
+flat/single-band memory) — see "Adding a radio" below for what a new
+radio on either protocol needs; a radio speaking neither means building a
+third protocol backend from scratch, not just a new config entry.
 
 Standalone extraction of the `channel-tools/` component from
 [mint-sauce-for-ham](https://github.com/KC3WHJ/mint-sauce-for-ham), a
@@ -33,29 +36,46 @@ project.
 - Python 3
 - `python3-tk` and `python3-serial` (`sudo apt install python3-tk
   python3-serial` on Debian/Ubuntu-based distros)
-- An Icom radio with CI-V support over USB (or a USB CAT adapter)
+- An Icom radio with CI-V support, or a Yaesu FT-891, over USB (or a USB
+  CAT adapter)
 
 ## Radio profile format
 
 This toolkit doesn't manage radio selection itself — it just reads one
 plain-text file, `~/radio_profiles/active-radio.conf`, in simple
-`KEY="value"` lines:
+`KEY="value"` lines. For an Icom radio (CI-V):
 
 ```bash
 RIG_NAME="IC-705"
 SERIAL_DEVICE="/dev/serial/by-id/usb-Icom_Inc._IC-705_IC-705_XXXXXXXX-if00"
+PROTOCOL="civ"
 CIV_ADDR="A4"
 MEMORY_GROUPS="true"
+BAUD_RATE="115200"
 ```
 
-- `SERIAL_DEVICE` and `CIV_ADDR` (hex, no `0x` prefix) are required.
+For a Yaesu FT-891 (CAT):
+
+```bash
+RIG_NAME="FT-891"
+SERIAL_DEVICE="/dev/serial/by-id/usb-Silicon_Labs_CP2105_..."
+PROTOCOL="yaesu_cat"
+MEMORY_GROUPS="false"
+BAUD_RATE="38400"
+```
+
+- `SERIAL_DEVICE` is always required. `PROTOCOL` (`"civ"` or
+  `"yaesu_cat"`) picks the backend; omit it and it defaults to `"civ"`.
+- `CIV_ADDR` (hex, no `0x` prefix) is required for `"civ"`, unused for
+  `"yaesu_cat"` (Yaesu's CAT protocol has no transceiver-address concept).
 - `RIG_NAME` should match a key `channel_maps/<name>.json` derives to (see
   "Adding a radio") — used for display and to pick the right channel map.
 - `MEMORY_GROUPS` — `"true"` for multi-band/grouped-memory radios (e.g.
-  IC-705), `"false"` for single-band/flat-memory radios (e.g. IC-7300).
-  Defaults to `"true"` if omitted.
-- Serial speed is fixed at 115200 baud internally (both scripts), not read
-  from this file — set your radio's own CI-V USB baud rate menu to match.
+  IC-705), `"false"` for single-band/flat-memory radios (e.g. IC-7300,
+  FT-891). Defaults to `"true"` if omitted; only meaningful for `"civ"`.
+- `BAUD_RATE` — read per-radio from this file (not a shared constant);
+  defaults to 115200 if omitted. Set your radio's own CAT/CI-V baud rate
+  menu to match whatever you put here.
 - Find your radio's `SERIAL_DEVICE` with `ls /dev/serial/by-id/`.
 
 If you're coming from mint-sauce-for-ham, this is the exact same file its
@@ -84,9 +104,9 @@ If you're coming from mint-sauce-for-ham, this is the exact same file its
 - `extract_pdf.py` — best-effort PDF-to-CSV extractor (see below).
 - `build_channel_index.py` — rebuilds every `channels_<radio>.json` from
   the CSVs + `channel_maps/*.json` (all radios, one run).
-- `program_channels.py` — pushes channels to whichever radio is active over
-  CI-V (USB — close rigctld/flrig/WSJT-X/etc. first so the serial port is
-  free).
+- `program_channels.py` — pushes channels to whichever radio is active,
+  over CI-V or Yaesu CAT per its profile's `PROTOCOL` (USB — close
+  rigctld/flrig/WSJT-X/etc. first so the serial port is free).
 - `channel-picker.py` — the desktop app.
 
 ## Grouped vs. flat memory — why there are per-radio maps at all
@@ -108,33 +128,41 @@ Icom radios speak two different CI-V memory dialects, set per-radio via
   `base_channel` values copied from a grouped radio's map, or they'll all
   land on the same physical memories.
 
-`program_channels.py`'s `Radio` class handles the CI-V-byte-level difference
-in one place (`select_memory`); everything else (frequency/mode/tone
-encoding) is standard CI-V shared across the whole Icom line.
+`program_channels.py`'s `Radio` class handles the CI-V-byte-level
+difference in one place (`select_memory`); everything else
+(frequency/mode/tone encoding) is standard CI-V shared across the whole
+Icom line. `YaesuFT891Radio` is a completely separate class speaking
+Yaesu's plain-ASCII CAT protocol (`MW`/`MT`/`MR`/`MC`) instead — see its
+docstring in `program_channels.py` for the protocol details/sourcing.
 
-## IC-7300: HF-only, so only the non-VHF/UHF sections apply
+## IC-7300 and FT-891: HF-only, so only the non-VHF/UHF sections apply
 
-`channel_maps/ic7300.json` includes all five public sections (83 channels
-total) — the IC-7300 can't receive VHF/UHF at all, so any repeater-list
-sections you add for VHF/UHF use only need adding to a grouped radio's map.
+`channel_maps/ic7300.json` and `channel_maps/ft891.json` both include all
+five public sections (83 channels total) — neither radio can receive
+VHF/UHF at all, so any repeater-list sections you add for VHF/UHF use
+only need adding to a grouped Icom radio's map.
 
-**Known limitation: no custom on-radio channel name for flat-memory radios.**
-Frequency and mode program reliably via CI-V cmd `09` (copy VFO into the
-selected memory). Setting a channel's *name* normally works by reading the
-memory's raw content (cmd `1A 00`), patching the name bytes, and writing it
-back — this works on the IC-705, but a real IC-7300 rejects that write (NG
-reply) the instant *any* byte differs from what it just read, even a single
-character deep in the name field with everything else byte-identical to a
-successful unmodified round-trip. Verified this isn't a byte-offset or
-character-encoding bug (checked against Icom's own CI-V reference and
-cross-checked programmatically against the known-correct frequency
-encoding) — whatever precondition this radio's firmware actually wants
-isn't in the documentation as fetched, and further guessing against live
-memory writes wasn't worth the risk. So on a flat-memory radio,
-`program_channels.py` skips the name-write step entirely; the channel gets
-the right frequency/mode, but its on-radio memory list will show the
-radio's own default label, not the CSV's `Name`. The Channel Picker itself
-is unaffected either way — it reads names from `channels_<radio>.json`, not
+**Known limitation, IC-7300 specifically: no custom on-radio channel
+name.** This is a CI-V quirk of that one radio, not a general
+flat-memory limitation — the FT-891 (also flat-memory) has no such
+problem and does support on-radio names (via its `MT` command's TAG
+field). Frequency and mode program reliably on the IC-7300 via CI-V cmd
+`09` (copy VFO into the selected memory). Setting a channel's *name*
+normally works by reading the memory's raw content (cmd `1A 00`),
+patching the name bytes, and writing it back — this works on the IC-705,
+but a real IC-7300 rejects that write (NG reply) the instant *any* byte
+differs from what it just read, even a single character deep in the name
+field with everything else byte-identical to a successful unmodified
+round-trip. Verified this isn't a byte-offset or character-encoding bug
+(checked against Icom's own CI-V reference and cross-checked
+programmatically against the known-correct frequency encoding) —
+whatever precondition this radio's firmware actually wants isn't in the
+documentation as fetched, and further guessing against live memory
+writes wasn't worth the risk. So on the IC-7300, `program_channels.py`
+skips the name-write step entirely; the channel gets the right
+frequency/mode, but its on-radio memory list will show the radio's own
+default label, not the CSV's `Name`. The Channel Picker itself is
+unaffected either way — it reads names from `channels_<radio>.json`, not
 from the radio's own memory content.
 
 ## Getting a PDF to work from
@@ -216,17 +244,18 @@ you add or edit channels here and rerun `build_channel_index.py`.
 
 **The radio must already be in MEMO mode** (VFO/MEMORY icon → [MEMO] on the
 touchscreen, or the MEMO button on radios with one) for "Go to Channel" to
-actually change the displayed frequency. CI-V's memory-select commands
-(`08`/`08 A0`) set which channel is selected, but that only becomes
-visible/tuned if the radio's own operating mode is already Memory rather
-than VFO — there's no CI-V command to force that mode switch remotely. If a
-selection silently does nothing (or the radio briefly flashes a group
-number but the frequency doesn't change), check the radio is in MEMO mode
-first.
+actually change the displayed frequency. The memory-select commands on
+both protocols (CI-V `08`/`08 A0`, Yaesu CAT `MC`) set which channel is
+selected, but that only becomes visible/tuned if the radio's own
+operating mode is already Memory rather than VFO — neither protocol has
+a command to force that mode switch remotely (confirmed for the FT-891
+too, not just assumed from the Icom side). If a selection silently does
+nothing (or the radio briefly flashes a group number but the frequency
+doesn't change), check the radio is in MEMO mode first.
 
 **If `rigctld` or flrig is running, the picker stops it automatically before
 sending its command** — leaving either running while the picker also opens
-the serial port directly corrupts both sides' CI-V traffic (two processes
+the serial port directly corrupts both sides' traffic (two processes
 writing raw bytes to the same physical UART at once). It does *not* restart
 whatever it stopped afterward (it has no way to know if you want your other
 software's radio control back) — the status bar tells you what it stopped;
@@ -234,11 +263,14 @@ restart it yourself.
 
 ## Adding a radio
 
-1. Create/extend `~/radio_profiles/<name>.conf` with `CIV_ADDR` (the
-   radio's default CI-V address) and `MEMORY_GROUPS` (`"true"` if it's a
-   multi-band radio with grouped/banked memory, `"false"` if it's
-   single-band with flat 1-99 memory — check the radio's own CI-V
-   reference guide for cmd `08`'s data format to be sure, don't assume).
+**For an Icom radio (CI-V):**
+
+1. Create/extend `~/radio_profiles/<name>.conf` with `PROTOCOL="civ"`,
+   `CIV_ADDR` (the radio's default CI-V address), and `MEMORY_GROUPS`
+   (`"true"` if it's a multi-band radio with grouped/banked memory,
+   `"false"` if it's single-band with flat 1-99 memory — check the
+   radio's own CI-V reference guide for cmd `08`'s data format to be
+   sure, don't assume).
 2. Add `channel_maps/<name>.json` (matching `radio_key()`'s derivation —
    `"IC-7300"` → `"ic7300"`, lowercase with non-alphanumerics stripped) with
    whichever sections make sense for that radio (a VHF/UHF-capable radio can
@@ -248,6 +280,20 @@ restart it yourself.
    (`python3 program_channels.py <one channel number>`), before running the
    full batch — trust real hardware over assumptions; every CI-V quirk
    documented above was found exactly this way.
+
+**For a Yaesu radio speaking the same CAT dialect as the FT-891** (steps
+2-4 identical to above): add `PROTOCOL="yaesu_cat"` instead of the CI-V
+fields. `YaesuFT891Radio` should work as-is for another radio using the
+same `MW`/`MT`/`MC` command set and field layout, but verify against that
+radio's own CAT reference book first — Yaesu's command set isn't
+guaranteed identical across their whole line, and this has only ever been
+confirmed against the FT-891 itself.
+
+**For anything else** (Kenwood, Xiegu, a Yaesu radio with a meaningfully
+different CAT dialect, etc.): means building a third protocol backend
+from scratch — a new class alongside `Radio` and `YaesuFT891Radio` in
+`program_channels.py`, plus matching dispatch logic in that file's
+`main()` and in `channel-picker.py`'s `select_memory()`.
 
 ## Known limitations (not fixable via CSV/CI-V, by design)
 
